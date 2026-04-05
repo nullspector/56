@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>56 – Ambathiyaaru</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=Rajdhani:wght@400;600;700&family=Noto+Sans+Malayalam:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #0a0f0a;
+    --surface: #111a11;
+    --surface2: #162016;
+    --border: #2a4a2a;
+    --accent: #c8a84b;
+    --accent2: #e8c96b;
+    --green: #2d7a3a;
+    --green2: #3a9a4a;
+    --red: #c0392b;
+    --blue: #2980b9;
+    --text: #e8dcc8;
+    --muted: #7a8a7a;
+    --card-bg: #fdf6e3;
+    --card-shadow: 0 4px 16px rgba(0,0,0,0.6);
+    --team-a: #c8a84b;
+    --team-b: #5b9bd5;
+    --glow: 0 0 20px rgba(200,168,75,0.3);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Background pattern */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      repeating-linear-gradient(45deg, transparent, transparent 40px, rgba(200,168,75,0.02) 40px, rgba(200,168,75,0.02) 80px),
+      repeating-linear-gradient(-45deg, transparent, transparent 40px, rgba(45,122,58,0.03) 40px, rgba(45,122,58,0.03) 80px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #app { position: relative; z-index: 1; }
+
+  /* ── LOBBY ── */
+  #lobby {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+    gap: 0;
+  }
+
+  .logo-block {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  .logo-mal {
+    font-family: 'Noto Sans Malayalam', serif;
+    font-size: 1.1rem;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    margin-bottom: 0.3rem;
+  }
+
+  .logo-num {
+    font-family: 'Playfair Display', serif;
+    font-size: 7rem;
+    font-weight: 700;
+    line-height: 1;
+    background: linear-gradient(135deg, #c8a84b 0%, #e8c96b 50%, #a07830 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    filter: drop-shadow(0 0 30px rgba(200,168,75,0.5));
+  }
+
+  .logo-sub {
+    font-family: 'Playfair Display', serif;
+    font-style: italic;
+    font-size: 1.3rem;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    margin-top: 0.2rem;
+  }
+
+  .suits-row {
+    display: flex;
+    gap: 1rem;
+    font-size: 1.8rem;
+    margin: 0.8rem 0 2rem;
+    opacity: 0.6;
+  }
+  .suits-row span:nth-child(1), .suits-row span:nth-child(4) { color: var(--text); }
+  .suits-row span:nth-child(2), .suits-row span:nth-child(3) { color: var(--red); }
+
+  .lobby-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem 2.5rem;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+
+  .lobby-card h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+    text-align: center;
+  }
+
+  .field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+  }
+
+  label {
+    font-size: 0.8rem;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  input[type="text"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+  input[type="text"]::placeholder { color: var(--muted); font-weight: 400; }
+
+  .room-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .room-row input { flex: 1; }
+
+  button {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 0.9rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.7rem 1.4rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.18s;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--green), var(--green2));
+    color: #fff;
+    width: 100%;
+    margin-top: 0.5rem;
+    padding: 0.85rem;
+    font-size: 1rem;
+    box-shadow: 0 4px 14px rgba(45,122,58,0.4);
+  }
+  .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--accent);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--accent); }
+
+  .btn-accent {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #1a1000;
+    font-weight: 700;
+  }
+  .btn-accent:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+  .btn-danger {
+    background: var(--red);
+    color: #fff;
+  }
+
+  .btn-sm {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+  }
+
+  /* ── GAME LAYOUT ── */
+  #game { display: none; flex-direction: column; min-height: 100vh; }
+
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.7rem 1.5rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .top-bar-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.4rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .score-badges {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+  }
+
+  .score-badge {
+    padding: 0.3rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .score-badge.a { background: rgba(200,168,75,0.15); color: var(--team-a); border: 1px solid rgba(200,168,75,0.3); }
+  .score-badge.b { background: rgba(91,155,213,0.15); color: var(--team-b); border: 1px solid rgba(91,155,213,0.3); }
+
+  .game-body {
+    display: grid;
+    grid-template-columns: 220px 1fr 220px;
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+  }
+
+  @media(max-width:800px) {
+    .game-body { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .sidebar.right-sidebar { display: block; }
+  }
+
+  /* ── SIDEBARS ── */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+  }
+  .sidebar.right-sidebar { border-right: none; border-left: 1px solid var(--border); }
+
+  .sidebar-section h3 {
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.6rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0.4rem;
+  }
+
+  .player-list-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0;
+    font-size: 0.9rem;
+  }
+
+  .team-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .team-dot.a { background: var(--team-a); }
+  .team-dot.b { background: var(--team-b); }
+  .team-dot.none { background: var(--muted); }
+
+  .player-name-label { flex: 1; }
+  .you-badge { font-size: 0.65rem; color: var(--accent); background: rgba(200,168,75,0.1); padding: 0.1rem 0.4rem; border-radius: 4px; }
+
+  .current-player-highlight { color: var(--accent2); font-weight: 700; }
+
+  /* ── CHAT ── */
+  .chat-box {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 0.6rem;
+    min-height: 120px;
+    max-height: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .log-entry { color: var(--muted); }
+  .log-entry.important { color: var(--accent); font-weight: 600; }
+  .chat-entry { color: var(--text); }
+  .chat-entry span { color: var(--accent); font-weight: 700; }
+
+  .chat-input-row { display: flex; gap: 0.4rem; margin-top: 0.4rem; }
+  .chat-input-row input { flex: 1; font-size: 0.85rem; padding: 0.4rem 0.6rem; }
+  .chat-input-row button { padding: 0.4rem 0.7rem; }
+
+  /* ── MAIN AREA ── */
+  .main-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1.5rem 1rem;
+    gap: 1rem;
+    overflow-y: auto;
+    background: radial-gradient(ellipse at 50% 40%, #142014 0%, #0a0f0a 100%);
+  }
+
+  /* ── STATUS BAR ── */
+  .status-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.7rem 1.4rem;
+    text-align: center;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent2);
+    letter-spacing: 0.05em;
+    width: 100%;
+    max-width: 600px;
+  }
+
+  /* ── BID INFO ── */
+  .bid-info {
+    display: flex;
+    gap: 1.5rem;
+    font-size: 0.9rem;
+    color: var(--muted);
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .bid-info strong { color: var(--accent); }
+
+  /* ── TABLE ── */
+  .table-area {
+    width: 100%;
+    max-width: 580px;
+    min-height: 180px;
+    background: radial-gradient(ellipse, #1a3a1a 0%, #0e250e 100%);
+    border: 2px solid var(--border);
+    border-radius: 20px;
+    box-shadow: inset 0 0 40px rgba(0,0,0,0.5), 0 0 30px rgba(45,122,58,0.15);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    position: relative;
+  }
+
+  .table-empty-hint {
+    color: var(--border);
+    font-size: 0.85rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    width: 64px;
+    height: 96px;
+    background: var(--card-bg);
+    border-radius: 8px;
+    box-shadow: var(--card-shadow);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Playfair Display', serif;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.15s, box-shadow 0.15s;
+    user-select: none;
+    border: 2px solid transparent;
+    flex-shrink: 0;
+  }
+
+  .card:hover { transform: translateY(-6px); box-shadow: 0 10px 28px rgba(0,0,0,0.7); }
+  .card.selected { border-color: var(--accent); transform: translateY(-10px); box-shadow: 0 12px 32px rgba(200,168,75,0.5); }
+  .card.disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .card.not-my-turn { cursor: not-allowed; }
+  .card.not-my-turn:hover { transform: none; }
+
+  .card-rank {
+    font-size: 1.3rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .card-suit {
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+
+  .card-corner {
+    position: absolute;
+    top: 4px; left: 5px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.1;
+    text-align: center;
+  }
+  .card-corner-br {
+    position: absolute;
+    bottom: 4px; right: 5px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.1;
+    text-align: center;
+    transform: rotate(180deg);
+  }
+
+  .card.red .card-rank, .card.red .card-suit,
+  .card.red .card-corner, .card.red .card-corner-br { color: var(--red); }
+  .card.black .card-rank, .card.black .card-suit,
+  .card.black .card-corner, .card.black .card-corner-br { color: #1a1a1a; }
+
+  .card.special { border-color: var(--accent); }
+
+  /* Card on table */
+  .played-card-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .played-card-name {
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    text-align: center;
+    max-width: 70px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ── HAND ── */
+  .hand-area {
+    width: 100%;
+    max-width: 700px;
+  }
+
+  .hand-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.6rem;
+    text-align: center;
+  }
+
+  .hand-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: center;
+  }
+
+  /* ── ACTION PANEL ── */
+  .action-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.2rem 1.5rem;
+    width: 100%;
+    max-width: 580px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .action-panel h3 {
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.2rem;
+  }
+
+  .bid-controls {
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .bid-input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    padding: 0.5rem 0.8rem;
+    border-radius: 8px;
+    outline: none;
+    width: 90px;
+    text-align: center;
+  }
+  .bid-input:focus { border-color: var(--accent); }
+
+  .suit-picker {
+    display: flex;
+    gap: 0.6rem;
+  }
+
+  .suit-btn {
+    width: 52px; height: 52px;
+    border-radius: 10px;
+    font-size: 1.6rem;
+    background: var(--bg);
+    border: 2px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .suit-btn:hover { border-color: var(--accent); transform: scale(1.1); }
+  .suit-btn.red-suit { color: var(--red); }
+  .suit-btn.black-suit { color: var(--text); }
+
+  /* ── SCORES TABLE ── */
+  .scores-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .scores-table th {
+    text-align: left;
+    padding: 0.3rem 0.5rem;
+    color: var(--muted);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+  .scores-table td {
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid rgba(42,74,42,0.3);
+  }
+  .scores-table .team-a { color: var(--team-a); font-weight: 700; }
+  .scores-table .team-b { color: var(--team-b); font-weight: 700; }
+
+  /* ── TRUMP DISPLAY ── */
+  .trump-display {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .trump-suit {
+    font-size: 1.4rem;
+  }
+  .trump-suit.red { color: var(--red); }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  @keyframes slideIn {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .card { animation: fadeIn 0.25s ease; }
+  .status-bar { animation: slideIn 0.3s ease; }
+
+  .pulse { animation: pulse 1.2s infinite; }
+
+  /* ── TOAST ── */
+  #toast-container {
+    position: fixed;
+    top: 1rem; right: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    z-index: 1000;
+  }
+  .toast {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 0.7rem 1rem;
+    font-size: 0.9rem;
+    color: var(--text);
+    animation: slideIn 0.25s ease;
+    max-width: 280px;
+  }
+  .toast.error { border-left-color: var(--red); }
+  .toast.success { border-left-color: var(--green2); }
+
+  /* ── TRICK WON FLASH ── */
+  .trick-won-flash {
+    position: absolute;
+    inset: 0;
+    background: rgba(200,168,75,0.1);
+    border-radius: 18px;
+    pointer-events: none;
+    animation: fadeIn 0.2s ease;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .divider { height: 1px; background: var(--border); width: 100%; }
+
+  .room-id-display {
+    font-size: 0.78rem;
+    color: var(--muted);
+    background: var(--bg);
+    border-radius: 6px;
+    padding: 0.3rem 0.7rem;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    transition: border-color 0.2s;
+  }
+  .room-id-display:hover { border-color: var(--accent); color: var(--accent); }
+
+  .hand-count-badge {
+    font-size: 0.7rem;
+    background: var(--border);
+    border-radius: 10px;
+    padding: 0.1rem 0.4rem;
+    color: var(--muted);
+  }
+
+  .game-end-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 500;
+    animation: fadeIn 0.4s ease;
+  }
+  .game-end-card {
+    background: var(--surface);
+    border: 2px solid var(--accent);
+    border-radius: 20px;
+    padding: 3rem;
+    text-align: center;
+    box-shadow: 0 0 80px rgba(200,168,75,0.3);
+  }
+  .game-end-card h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 3rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 1rem;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+<div id="toast-container"></div>
+
+<!-- ══ LOBBY ══ -->
+<div id="lobby">
+  <div class="logo-block">
+    <div class="logo-mal">അമ്പതിയാറ്</div>
+    <div class="logo-num">56</div>
+    <div class="logo-sub">Ambathiyaaru</div>
+    <div class="suits-row">
+      <span>♠</span><span>♥</span><span>♦</span><span>♣</span>
+    </div>
+  </div>
+  <div class="lobby-card">
+    <h2>Join or Create Room</h2>
+    <div class="field-group">
+      <label>Your Name</label>
+      <input type="text" id="nameInput" placeholder="Enter your name..." maxlength="20"/>
+    </div>
+    <div class="field-group">
+      <label>Room ID</label>
+      <div class="room-row">
+        <input type="text" id="roomInput" placeholder="e.g. kerala-squad" maxlength="20"/>
+        <button class="btn-secondary" onclick="randomRoom()">Random</button>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="joinRoom()">Enter Room →</button>
+    <div style="margin-top:1rem;font-size:0.8rem;color:var(--muted);text-align:center;">
+      Share the Room ID with your Discord friends to play together
+    </div>
+  </div>
+</div>
+
+<!-- ══ GAME ══ -->
+<div id="game">
+  <div class="top-bar">
+    <div style="display:flex;align-items:center;gap:1rem;">
+      <span class="top-bar-title">56</span>
+      <span id="roomIdDisplay" class="room-id-display" onclick="copyRoomId()" title="Click to copy">Room: —</span>
+    </div>
+    <div class="score-badges">
+      <div class="score-badge a">Team A: <span id="totalA">0</span></div>
+      <div class="score-badge b">Team B: <span id="totalB">0</span></div>
+    </div>
+    <div style="display:flex;gap:0.5rem;">
+      <button class="btn-secondary btn-sm" id="startBtn" onclick="startGame()" style="display:none;">▶ Start Game</button>
+      <button class="btn-secondary btn-sm" id="nextRoundBtn" onclick="nextRound()" style="display:none;">↻ Next Round</button>
+    </div>
+  </div>
+
+  <div class="game-body">
+    <!-- Left sidebar: Players -->
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <h3>Players</h3>
+        <div id="playerList"></div>
+      </div>
+      <div class="divider"></div>
+      <div class="sidebar-section">
+        <h3>Round Scores</h3>
+        <table class="scores-table">
+          <thead>
+            <tr><th>Team</th><th>Tricks</th><th>Pts</th><th>Total</th></tr>
+          </thead>
+          <tbody id="scoreTableBody">
+            <tr><td class="team-a">A</td><td id="tricksA">0</td><td id="scoreA">0</td><td id="totA">0</td></tr>
+            <tr><td class="team-b">B</td><td id="tricksB">0</td><td id="scoreB">0</td><td id="totB">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="divider"></div>
+      <div class="sidebar-section" style="flex:1;">
+        <h3>Round History</h3>
+        <div id="roundHistory" style="font-size:0.8rem;color:var(--muted);line-height:1.8;"></div>
+      </div>
+    </div>
+
+    <!-- Main area -->
+    <div class="main-area">
+      <div class="status-bar" id="statusBar">Waiting for players...</div>
+
+      <div class="bid-info" id="bidInfo" style="display:none;">
+        <span>Current Bid: <strong id="bidAmount">—</strong></span>
+        <span>By: <strong id="bidBy">—</strong></span>
+        <div class="trump-display" id="trumpDisplay" style="display:none;">
+          Trump: <span class="trump-suit" id="trumpSuit">—</span>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="table-area" id="tableArea">
+        <span class="table-empty-hint">Waiting for cards...</span>
+      </div>
+
+      <!-- Action Panel -->
+      <div class="action-panel" id="actionPanel" style="display:none;">
+        <!-- Bidding -->
+        <div id="bidAction" style="display:none;">
+          <h3>Your Bid</h3>
+          <div class="bid-controls">
+            <input type="number" class="bid-input" id="bidValue" min="28" max="56" placeholder="28"/>
+            <button class="btn-accent" onclick="placeBid()">Bid</button>
+            <button class="btn-secondary" onclick="passBid()">Pass</button>
+          </div>
+          <div style="font-size:0.8rem;color:var(--muted);margin-top:0.3rem;">Min bid: <span id="minBidLabel">28</span> | J=3pts, 9=2pts, A=1pt, 10=1pt</div>
+        </div>
+        <!-- Trump selection -->
+        <div id="trumpAction" style="display:none;">
+          <h3>Choose Trump Suit</h3>
+          <div class="suit-picker">
+            <button class="suit-btn black-suit" onclick="chooseTrump('♠')">♠</button>
+            <button class="suit-btn red-suit" onclick="chooseTrump('♥')">♥</button>
+            <button class="suit-btn red-suit" onclick="chooseTrump('♦')">♦</button>
+            <button class="suit-btn black-suit" onclick="chooseTrump('♣')">♣</button>
+          </div>
+        </div>
+        <!-- Play card -->
+        <div id="playAction" style="display:none;">
+          <h3>Play a Card</h3>
+          <div style="font-size:0.85rem;color:var(--muted);">Select a card from your hand, then click it again to play</div>
+        </div>
+      </div>
+
+      <!-- Hand -->
+      <div class="hand-area" id="handArea" style="display:none;">
+        <div class="hand-label">Your Hand (<span id="handCount">0</span> cards)</div>
+        <div class="hand-cards" id="handCards"></div>
+      </div>
+    </div>
+
+    <!-- Right sidebar: Chat/Log -->
+    <div class="sidebar right-sidebar">
+      <div class="sidebar-section" style="flex:1;display:flex;flex-direction:column;">
+        <h3>Game Log & Chat</h3>
+        <div class="chat-box" id="chatBox"></div>
+        <div class="chat-input-row">
+          <input type="text" id="chatInput" placeholder="Say something..." maxlength="100" onkeydown="if(event.key==='Enter')sendChat()"/>
+          <button class="btn-secondary btn-sm" onclick="sendChat()">→</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="sidebar-section">
+        <h3>Rules Quick Ref</h3>
+        <div style="font-size:0.78rem;color:var(--muted);line-height:1.7;">
+          🃏 Double pack (56 cards)<br/>
+          👑 J=3pts, 9=2pts, A=1, 10=1<br/>
+          🏆 J &gt; 9 &gt; A &gt; 10 &gt; K &gt; Q &gt; 8 &gt; 7<br/>
+          📢 Bid: 28–56 (or pass)<br/>
+          🌟 Winner picks trump suit<br/>
+          ♠♥♦♣ Must follow lead suit<br/>
+          🎯 First team to 56 wins!<br/>
+          💀 Fail bid = lose bid pts
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────
+let ws = null;
+let myId = null;
+let myRoomId = null;
+let myName = null;
+let state = null;
+let selectedCard = null;
+let isHost = false;
+
+// ── WebSocket ──────────────────────────────────────────────────────
+function connect(onOpen) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}`);
+  ws.onopen = () => onOpen && onOpen();
+  ws.onmessage = (e) => handleMsg(JSON.parse(e.data));
+  ws.onclose = () => toast('Disconnected. Refresh to reconnect.', 'error');
+  ws.onerror = () => toast('Connection error.', 'error');
+}
+
+function send(obj) {
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+}
+
+// ── Lobby ──────────────────────────────────────────────────────────
+function randomRoom() {
+  const words = ['mango','river','coconut','tapioca','boat','rain','chai','spice','lotus','kappa'];
+  const a = words[Math.floor(Math.random()*words.length)];
+  const b = Math.floor(1000 + Math.random()*9000);
+  document.getElementById('roomInput').value = `${a}-${b}`;
+}
+
+function joinRoom() {
+  const name = document.getElementById('nameInput').value.trim();
+  const roomId = document.getElementById('roomInput').value.trim();
+  if (!name) { toast('Enter your name!', 'error'); return; }
+  if (!roomId) { toast('Enter a room ID!', 'error'); return; }
+  myName = name;
+  myRoomId = roomId;
+  connect(() => {
+    send({ type: 'join_room', roomId, name });
+  });
+}
+
+function startGame() { send({ type: 'start_game' }); }
+function nextRound() { send({ type: 'next_round' }); }
+
+// ── Actions ────────────────────────────────────────────────────────
+function placeBid() {
+  const v = parseInt(document.getElementById('bidValue').value);
+  if (isNaN(v)) { toast('Enter a bid amount', 'error'); return; }
+  send({ type: 'bid', amount: v });
+}
+function passBid() { send({ type: 'bid', amount: 0 }); }
+function chooseTrump(suit) { send({ type: 'choose_trump', suit }); }
+
+function sendChat() {
+  const inp = document.getElementById('chatInput');
+  const text = inp.value.trim();
+  if (!text) return;
+  send({ type: 'chat', text });
+  inp.value = '';
+}
+
+function copyRoomId() {
+  navigator.clipboard.writeText(myRoomId).then(() => toast(`Room ID "${myRoomId}" copied!`, 'success'));
+}
+
+// ── Message Handler ────────────────────────────────────────────────
+function handleMsg(msg) {
+  switch (msg.type) {
+    case 'connected':
+      myId = msg.playerId;
+      break;
+
+    case 'joined':
+      showGame();
+      break;
+
+    case 'room_state':
+      state = msg;
+      renderState();
+      break;
+
+    case 'log':
+      addLog(msg.msg);
+      break;
+
+    case 'chat':
+      addChat(msg.name, msg.msg);
+      break;
+
+    case 'error':
+      toast(msg.msg, 'error');
+      break;
+  }
+}
+
+// ── Render ─────────────────────────────────────────────────────────
+function showGame() {
+  document.getElementById('lobby').style.display = 'none';
+  document.getElementById('game').style.display = 'flex';
+  document.getElementById('roomIdDisplay').textContent = `Room: ${myRoomId}`;
+}
+
+function renderState() {
+  if (!state) return;
+
+  const me = state.players.find(p => p.id === myId);
+  isHost = state.players.length > 0 && state.players[0].id === myId;
+
+  // Scores
+  document.getElementById('totalA').textContent = state.totalScores.A;
+  document.getElementById('totalB').textContent = state.totalScores.B;
+  document.getElementById('scoreA').textContent = state.scores.A;
+  document.getElementById('scoreB').textContent = state.scores.B;
+  document.getElementById('tricksA').textContent = state.tricksWon.A;
+  document.getElementById('tricksB').textContent = state.tricksWon.B;
+  document.getElementById('totA').textContent = state.totalScores.A;
+  document.getElementById('totB').textContent = state.totalScores.B;
+
+  // Players
+  renderPlayers();
+
+  // Round history
+  renderHistory();
+
+  // Bid info
+  const hasBid = state.currentBid && state.currentBid.amount > 0;
+  document.getElementById('bidInfo').style.display = ['bidding','trump','playing','roundEnd'].includes(state.state) ? 'flex' : 'none';
+  if (hasBid) {
+    document.getElementById('bidAmount').textContent = state.currentBid.amount;
+    const bidder = state.players.find(p => p.id === state.currentBid.player);
+    document.getElementById('bidBy').textContent = bidder?.name || '—';
+  }
+
+  // Trump
+  const trumpEl = document.getElementById('trumpDisplay');
+  const trumpSuitEl = document.getElementById('trumpSuit');
+  if (state.trump) {
+    trumpEl.style.display = 'flex';
+    trumpSuitEl.textContent = state.trump;
+    trumpSuitEl.className = 'trump-suit' + (['♥','♦'].includes(state.trump) ? ' red' : '');
+  } else {
+    trumpEl.style.display = 'none';
+  }
+
+  // Min bid
+  const minBid = Math.max(28, (state.currentBid?.amount || 0) + 1);
+  const minBidEl = document.getElementById('minBidLabel');
+  if (minBidEl) minBidEl.textContent = minBid;
+  const bidInput = document.getElementById('bidValue');
+  if (bidInput) bidInput.min = minBid;
+
+  // Status bar
+  renderStatus();
+
+  // Table
+  renderTable();
+
+  // Hand
+  renderHand(state.hand || []);
+
+  // Action panel
+  renderActions();
+
+  // Buttons
+  document.getElementById('startBtn').style.display = (isHost && state.state === 'lobby') ? 'block' : 'none';
+  document.getElementById('nextRoundBtn').style.display = (isHost && state.state === 'roundEnd') ? 'block' : 'none';
+
+  // Game end
+  if (state.state === 'gameEnd') {
+    const winner = state.totalScores.A >= 56 ? 'A' : 'B';
+    showGameEnd(winner);
+  }
+}
+
+function renderStatus() {
+  const el = document.getElementById('statusBar');
+  const cp = state.players.find(p => p.id === state.currentPlayer);
+  const isMyTurn = state.currentPlayer === myId;
+
+  let text = '';
+  switch (state.state) {
+    case 'lobby':
+      text = `Lobby — ${state.players.length} player(s) joined. ${isHost ? 'Start when ready!' : 'Waiting for host to start...'}`;
+      break;
+    case 'bidding':
+      text = isMyTurn ? '🎯 Your turn to bid or pass!' : `⏳ ${cp?.name || '?'} is bidding...`;
+      if (isMyTurn) el.classList.add('pulse');
+      else el.classList.remove('pulse');
+      break;
+    case 'trump':
+      text = isMyTurn ? '🌟 You won the bid! Choose trump suit.' : `⏳ ${cp?.name || '?'} is choosing trump...`;
+      break;
+    case 'playing':
+      text = isMyTurn ? '🃏 Your turn to play a card!' : `⏳ Waiting for ${cp?.name || '?'} to play...`;
+      if (isMyTurn) el.classList.add('pulse');
+      else el.classList.remove('pulse');
+      break;
+    case 'roundEnd':
+      el.classList.remove('pulse');
+      text = `Round over! ${isHost ? 'Start next round when ready.' : 'Waiting for host...'}`;
+      break;
+    case 'gameEnd':
+      el.classList.remove('pulse');
+      text = '🏆 Game over!';
+      break;
+    default:
+      text = state.state;
+  }
+  el.textContent = text;
+}
+
+function renderPlayers() {
+  const el = document.getElementById('playerList');
+  el.innerHTML = state.players.map(p => {
+    const isMe = p.id === myId;
+    const isCurrent = p.id === state.currentPlayer;
+    const dot = p.team ? `<span class="team-dot ${p.team.toLowerCase()}"></span>` : `<span class="team-dot none"></span>`;
+    return `<div class="player-list-item">
+      ${dot}
+      <span class="player-name-label ${isCurrent ? 'current-player-highlight' : ''}">${p.name} ${isMe ? '<span class="you-badge">YOU</span>' : ''}</span>
+      ${p.team ? `<span style="font-size:0.7rem;color:var(--muted);">T${p.team}</span>` : ''}
+      <span class="hand-count-badge">${p.handCount}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderHistory() {
+  const el = document.getElementById('roundHistory');
+  if (!state.roundHistory || state.roundHistory.length === 0) {
+    el.textContent = 'No rounds yet.';
+    return;
+  }
+  el.innerHTML = state.roundHistory.map((r, i) => {
+    const made = r.scores[r.bidTeam] >= r.bid;
+    return `<div>R${i+1}: Team ${r.bidTeam} bid ${r.bid} — ${made ? '✅ Made' : '💀 Set'}</div>`;
+  }).join('');
+}
+
+function renderTable() {
+  const el = document.getElementById('tableArea');
+  if (!state.currentTrick || state.currentTrick.length === 0) {
+    el.innerHTML = '<span class="table-empty-hint">Table is empty — play a card!</span>';
+    return;
+  }
+  el.innerHTML = state.currentTrick.map(t => {
+    const c = t.card;
+    const isRed = ['♥','♦'].includes(c.suit);
+    const isSpecial = c.rank === 'J' || c.rank === '9';
+    return `<div class="played-card-wrap">
+      <div class="card ${isRed ? 'red' : 'black'} ${isSpecial ? 'special' : ''}" style="cursor:default;">
+        <div class="card-corner">${c.rank}<br/>${c.suit}</div>
+        <div class="card-rank">${c.rank}</div>
+        <div class="card-suit">${c.suit}</div>
+        <div class="card-corner-br">${c.rank}<br/>${c.suit}</div>
+      </div>
+      <div class="played-card-name">${t.name}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderHand(hand) {
+  const handArea = document.getElementById('handArea');
+  const handCards = document.getElementById('handCards');
+  const handCount = document.getElementById('handCount');
+
+  if (!hand || hand.length === 0) {
+    handArea.style.display = 'none';
+    return;
+  }
+
+  handArea.style.display = 'block';
+  handCount.textContent = hand.length;
+
+  const isMyTurn = state.currentPlayer === myId && state.state === 'playing';
+
+  // Sort hand: by suit, then by trick rank desc
+  const sorted = [...hand].sort((a, b) => {
+    const suitOrder = {'♠':0,'♥':1,'♦':2,'♣':3};
+    const sd = suitOrder[a.suit] - suitOrder[b.suit];
+    if (sd !== 0) return sd;
+    return (TRICK_RANK[b.rank]||0) - (TRICK_RANK[a.rank]||0);
+  });
+
+  // Lead suit for follow-suit highlighting
+  const leadSuit = state.currentTrick && state.currentTrick.length > 0 ? state.currentTrick[0].card.suit : null;
+  const hasLeadSuit = leadSuit ? sorted.some(c => c.suit === leadSuit) : false;
+
+  handCards.innerHTML = sorted.map(c => {
+    const isRed = ['♥','♦'].includes(c.suit);
+    const isSpecial = c.rank === 'J' || c.rank === '9';
+    const isSelected = selectedCard === c.id;
+    const isValid = !isMyTurn ? false : (!hasLeadSuit || c.suit === leadSuit);
+    let cls = `card ${isRed ? 'red' : 'black'}`;
+    if (isSpecial) cls += ' special';
+    if (isSelected) cls += ' selected';
+    if (!isMyTurn) cls += ' not-my-turn';
+    if (isMyTurn && !isValid) cls += ' disabled';
+    return `<div class="${cls}" onclick="clickCard('${c.id}','${isMyTurn}','${isValid}')">
+      <div class="card-corner">${c.rank}<br/>${c.suit}</div>
+      <div class="card-rank">${c.rank}</div>
+      <div class="card-suit">${c.suit}</div>
+      <div class="card-corner-br">${c.rank}<br/>${c.suit}</div>
+    </div>`;
+  }).join('');
+}
+
+function clickCard(cardId, isMyTurn, isValid) {
+  if (isMyTurn === 'false') { toast("It's not your turn!", 'error'); return; }
+  if (isValid === 'false') { toast("Must follow the lead suit!", 'error'); return; }
+  if (state.state !== 'playing') return;
+
+  if (selectedCard === cardId) {
+    // Second click = play
+    send({ type: 'play_card', cardId });
+    selectedCard = null;
+  } else {
+    selectedCard = cardId;
+    renderHand(state.hand || []);
+  }
+}
+
+function renderActions() {
+  const panel = document.getElementById('actionPanel');
+  const bidAction = document.getElementById('bidAction');
+  const trumpAction = document.getElementById('trumpAction');
+  const playAction = document.getElementById('playAction');
+  const isMyTurn = state.currentPlayer === myId;
+
+  bidAction.style.display = 'none';
+  trumpAction.style.display = 'none';
+  playAction.style.display = 'none';
+  panel.style.display = 'none';
+
+  if (state.state === 'bidding' && isMyTurn) {
+    panel.style.display = 'flex';
+    bidAction.style.display = 'block';
+    const minBid = Math.max(28, (state.currentBid?.amount || 0) + 1);
+    document.getElementById('bidValue').value = minBid;
+  } else if (state.state === 'trump' && isMyTurn) {
+    panel.style.display = 'flex';
+    trumpAction.style.display = 'block';
+  } else if (state.state === 'playing' && isMyTurn) {
+    panel.style.display = 'flex';
+    playAction.style.display = 'block';
+  }
+}
+
+// ── Chat/Log ───────────────────────────────────────────────────────
+function addLog(msg) {
+  const box = document.getElementById('chatBox');
+  const important = msg.includes('🏆') || msg.includes('💀') || msg.includes('🎮') || msg.includes('✅') || msg.includes('🎯');
+  const div = document.createElement('div');
+  div.className = `log-entry${important ? ' important' : ''}`;
+  div.textContent = msg;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function addChat(name, msg) {
+  const box = document.getElementById('chatBox');
+  const div = document.createElement('div');
+  div.className = 'chat-entry';
+  div.innerHTML = `<span>${escHtml(name)}:</span> ${escHtml(msg)}`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Toast ──────────────────────────────────────────────────────────
+function toast(msg, type = '') {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// ── Game End Overlay ───────────────────────────────────────────────
+function showGameEnd(winner) {
+  if (document.querySelector('.game-end-overlay')) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'game-end-overlay';
+  const teamColor = winner === 'A' ? 'var(--team-a)' : 'var(--team-b)';
+  overlay.innerHTML = `<div class="game-end-card">
+    <h2>Team ${winner} Wins!</h2>
+    <div style="font-size:1.1rem;color:var(--muted);margin-bottom:1.5rem;">
+      Final Scores — A: ${state?.totalScores?.A || 0} | B: ${state?.totalScores?.B || 0}
+    </div>
+    <button class="btn-accent" onclick="this.closest('.game-end-overlay').remove()">Close</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+// ── Trick rank ref for client sorting ─────────────────────────────
+const TRICK_RANK = { 'J':8,'9':7,'A':6,'10':5,'K':4,'Q':3,'8':2,'7':1 };
+
+// ── Init ───────────────────────────────────────────────────────────
+document.getElementById('nameInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('roomInput').focus();
+});
+document.getElementById('roomInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') joinRoom();
+});
+</script>
+</body>
+</html>
