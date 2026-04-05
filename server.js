@@ -7,32 +7,48 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
-
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ─── 56 Game Logic ───────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════
+//  56 (AMBATHIYAARU) — RULES-ACCURATE IMPLEMENTATION
+//
+//  Each player always gets exactly 8 cards:
+//   4 players: J 9 A 10 × 2 packs = 32 cards
+//   6 players: J 9 A 10 K Q × 2 packs = 48 cards  (standard)
+//   8 players: J 9 A 10 K Q 8 7 × 2 packs = 64 cards
+//
+//  Trick rank: J > 9 > A > 10 > K > Q (> 8 > 7)
+//  Points: J=3, 9=2, A=1, 10=1. Total in game = 56.
+//
+//  Bidding: counter-clockwise. Right of dealer goes first.
+//  Supports: number+suit, suit+number, +n+suit, NT, NS, Pass, Double, Redouble
+//
+//  Scoring uses "tables" (each team starts with 12):
+//   Bid 28-39: win+1 / lose-2
+//   Bid 40-47: win+2 / lose-3
+//   Bid 48-55: win+3 / lose-4
+//   Bid 56:    win+4 / lose-5
+//   Double: multiplier ×2, Redouble: ×3
+//  Match ends when a team reaches 0 tables.
+// ═══════════════════════════════════════════════════════════════════
 
 const SUITS = ['♠', '♥', '♦', '♣'];
-const RANKS = ['A', 'K', 'Q', 'J', '10', '9', '8', '7'];
-
-// Point values in 56:
-// J=3, 9=2, A=1, 10=1, others=0
-// Total = 4*(3+2+1+1) = 28 points per pack, 56 total for double pack
 const CARD_POINTS = { 'J': 3, '9': 2, 'A': 1, '10': 1, 'K': 0, 'Q': 0, '8': 0, '7': 0 };
+const TRICK_RANK  = { 'J': 8, '9': 7, 'A': 6, '10': 5, 'K': 4, 'Q': 3, '8': 2, '7': 1 };
 
-// Trick-taking rank (higher = wins): J > 9 > A > 10 > K > Q > 8 > 7
-const TRICK_RANK = { 'J': 8, '9': 7, 'A': 6, '10': 5, 'K': 4, 'Q': 3, '8': 2, '7': 1 };
+const RANKS_BY_PLAYERS = {
+  4: ['J', '9', 'A', '10'],
+  6: ['J', '9', 'A', '10', 'K', 'Q'],
+  8: ['J', '9', 'A', '10', 'K', 'Q', '8', '7'],
+};
 
-function buildDeck() {
+function buildDeck(numPlayers) {
+  const ranks = RANKS_BY_PLAYERS[numPlayers] || RANKS_BY_PLAYERS[6];
   const deck = [];
-  // Double pack = 56 cards
-  for (let p = 0; p < 2; p++) {
-    for (const suit of SUITS) {
-      for (const rank of RANKS) {
+  for (let p = 0; p < 2; p++)
+    for (const suit of SUITS)
+      for (const rank of ranks)
         deck.push({ suit, rank, id: `${rank}${suit}-${p}` });
-      }
-    }
-  }
   return deck;
 }
 
@@ -45,244 +61,310 @@ function shuffle(arr) {
   return a;
 }
 
-function cardPoints(card) {
-  return CARD_POINTS[card.rank] || 0;
+// Tables: win amount for a bid
+function tablesWin(bidAmt) {
+  if (bidAmt <= 39) return 1;
+  if (bidAmt <= 47) return 2;
+  if (bidAmt <= 55) return 3;
+  return 4;
+}
+// Tables: lose amount (always win+1)
+function tablesLose(bidAmt) { return tablesWin(bidAmt) + 1; }
+
+function applyMultiplier(base, doubleState) {
+  if (doubleState === 2) return base * 3;
+  if (doubleState === 1) return base * 2;
+  return base;
 }
 
-function trickRank(card) {
-  return TRICK_RANK[card.rank] || 0;
-}
-
-// Determine winner of a trick
 function trickWinner(trick, trump) {
-  // trick = [{playerId, card}, ...]
   const leadSuit = trick[0].card.suit;
   let best = trick[0];
   for (let i = 1; i < trick.length; i++) {
-    const c = trick[i].card;
-    const b = best.card;
-    const cTrump = c.suit === trump;
-    const bTrump = b.suit === trump;
-    if (cTrump && !bTrump) { best = trick[i]; continue; }
-    if (!cTrump && bTrump) continue;
-    // Same trump status
+    const c = trick[i].card, b = best.card;
+    const cT = trump && c.suit === trump;
+    const bT = trump && b.suit === trump;
+    if (cT && !bT)  { best = trick[i]; continue; }
+    if (!cT && bT) continue;
     if (c.suit === b.suit) {
-      if (trickRank(c) > trickRank(b)) best = trick[i];
-    } else {
-      // c not lead suit and not trump = doesn't win
-      if (c.suit === leadSuit && b.suit !== leadSuit && !bTrump) {
-        best = trick[i];
-      }
+      if ((TRICK_RANK[c.rank] || 0) > (TRICK_RANK[b.rank] || 0)) best = trick[i];
+    } else if (c.suit === leadSuit && !bT && b.suit !== leadSuit) {
+      best = trick[i];
     }
   }
   return best.playerId;
 }
 
-// ─── Room Management ─────────────────────────────────────────────────────────
+// ─── Room State ──────────────────────────────────────────────────────────────
 
-const rooms = {}; // roomId -> Room
-const clients = {}; // ws -> { playerId, roomId, name }
+const rooms   = {};
+const clients = {};
 
-function createRoom(roomId) {
+function createRoom(id) {
   return {
-    id: roomId,
-    players: [], // { id, name, ws, team, hand, ready }
-    state: 'lobby', // lobby | bidding | trump | playing | roundEnd | gameEnd
-    deck: [],
+    id,
+    players: [],
+    state: 'lobby',
+    dealerIdx: 0,
+    currentBidderIdx: null,
     bids: [],
-    currentBid: { amount: 0, player: null },
+    currentBid: { amount: 0, playerId: null, trump: null },
+    doubleState: 0,
+    doubledBy: null,
     trump: null,
     currentTrick: [],
     trickLeader: null,
     currentPlayer: null,
-    scores: { A: 0, B: 0 }, // team scores (points in current round)
-    totalScores: { A: 0, B: 0 }, // game total
-    tricksWon: { A: 0, B: 0 },
+    roundPoints: { A: 0, B: 0 },
+    tables: { A: 12, B: 12 },
     roundHistory: [],
-    targetScore: 56,
-    maxPlayers: 6,
+    passCount: 0,
   };
 }
 
-function broadcast(room, msg, excludeId = null) {
-  room.players.forEach(p => {
-    if (p.id !== excludeId && p.ws && p.ws.readyState === 1) {
-      p.ws.send(JSON.stringify(msg));
-    }
-  });
-}
+const broadcast = (room, msg) =>
+  room.players.forEach(p => p.ws?.readyState === 1 && p.ws.send(JSON.stringify(msg)));
 
-function broadcastAll(room, msg) {
-  room.players.forEach(p => {
-    if (p.ws && p.ws.readyState === 1) {
-      p.ws.send(JSON.stringify(msg));
-    }
-  });
-}
-
-function sendTo(ws, msg) {
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
-}
-
-function getRoomState(room, forPlayerId = null) {
-  return {
-    type: 'room_state',
-    roomId: room.id,
-    state: room.state,
-    players: room.players.map(p => ({
-      id: p.id,
-      name: p.name,
-      team: p.team,
-      handCount: p.hand ? p.hand.length : 0,
-      ready: p.ready,
-    })),
-    hand: forPlayerId ? (room.players.find(p => p.id === forPlayerId)?.hand || []) : [],
-    bids: room.bids,
-    currentBid: room.currentBid,
-    trump: room.trump,
-    currentTrick: room.currentTrick,
-    currentPlayer: room.currentPlayer,
-    scores: room.scores,
-    totalScores: room.totalScores,
-    tricksWon: room.tricksWon,
-    trickLeader: room.trickLeader,
-    roundHistory: room.roundHistory,
-  };
-}
+const sendTo = (ws, msg) =>
+  ws?.readyState === 1 && ws.send(JSON.stringify(msg));
 
 function sendState(room) {
   room.players.forEach(p => {
-    if (p.ws && p.ws.readyState === 1) {
-      sendTo(p.ws, getRoomState(room, p.id));
-    }
+    if (!p.ws || p.ws.readyState !== 1) return;
+    p.ws.send(JSON.stringify({
+      type: 'room_state',
+      roomId: room.id,
+      state: room.state,
+      players: room.players.map((pl, i) => ({
+        id: pl.id, name: pl.name, team: pl.team,
+        handCount: pl.hand?.length ?? 0,
+        isDealer: i === room.dealerIdx,
+      })),
+      hand: p.hand || [],
+      bids: room.bids,
+      currentBid: room.currentBid,
+      doubleState: room.doubleState,
+      trump: room.trump,
+      currentTrick: room.currentTrick,
+      currentPlayer: room.currentPlayer,
+      currentBidder: room.players[room.currentBidderIdx]?.id ?? null,
+      roundPoints: room.roundPoints,
+      tables: room.tables,
+      roundHistory: room.roundHistory,
+      dealerIdx: room.dealerIdx,
+    }));
   });
+}
+
+function ccwNext(room, idx) {
+  return (idx - 1 + room.players.length) % room.players.length;
+}
+
+function getTeam(room, pid) {
+  return room.players.find(p => p.id === pid)?.team ?? null;
 }
 
 function assignTeams(room) {
-  // Alternate teams: 0,2,4 = Team A; 1,3,5 = Team B
-  room.players.forEach((p, i) => {
-    p.team = i % 2 === 0 ? 'A' : 'B';
-  });
+  room.players.forEach((p, i) => { p.team = i % 2 === 0 ? 'A' : 'B'; });
 }
 
 function dealCards(room) {
-  room.deck = shuffle(buildDeck());
-  const n = room.players.length;
-  const cardsPerPlayer = Math.floor(56 / n);
-  room.players.forEach((p, i) => {
-    p.hand = room.deck.slice(i * cardsPerPlayer, (i + 1) * cardsPerPlayer);
-  });
+  const deck = shuffle(buildDeck(room.players.length));
+  room.players.forEach((p, i) => { p.hand = deck.slice(i * 8, (i + 1) * 8); });
 }
+
+// ─── Bid Parsing ─────────────────────────────────────────────────────────────
+
+const SUIT_SYMBOLS = ['♠', '♥', '♦', '♣'];
+function extractSuit(text) {
+  for (const s of SUIT_SYMBOLS) if (text.includes(s)) return s;
+  const lo = text.toLowerCase();
+  if (lo.includes('spade'))   return '♠';
+  if (lo.includes('heart'))   return '♥';
+  if (lo.includes('diamond') || lo.includes('dice')) return '♦';
+  if (lo.includes('club'))    return '♣';
+  return null;
+}
+
+function parseBid(text, currentHighest) {
+  const t = text.trim();
+  const lo = t.toLowerCase();
+
+  if (lo === 'pass')     return { type: 'pass' };
+  if (lo === 'double')   return { type: 'double' };
+  if (lo === 'redouble') return { type: 'redouble' };
+
+  const isNT = /nt|no.?trump/i.test(t);
+  const isNS = /noes|ns\b/i.test(t);
+  const isPass = /pass/i.test(t);
+  const nums = (t.match(/\d+/g) || []).map(Number);
+  const suit = extractSuit(t);
+  const isPlus = t.startsWith('+');
+
+  if (isPlus) {
+    const inc = nums[0] || 1;
+    const newVal = currentHighest + inc;
+    if (isNT || isNS) return { type: 'plus_nt', numericValue: newVal, trump: null };
+    if (suit) return { type: 'plus_suit', numericValue: newVal, trump: suit };
+    return null;
+  }
+
+  if (isPass && nums.length > 0) return { type: 'pass_bid', numericValue: nums[0], trump: null };
+  if (isNT && nums.length > 0)   return { type: 'nt', numericValue: nums[0], trump: null };
+  if (isNS && nums.length > 0)   return { type: 'ns', numericValue: nums[0], trump: null };
+
+  if (suit && nums.length > 0) {
+    const suitFirst = t.indexOf(suit) < t.indexOf(String(nums[0]));
+    return { type: suitFirst ? 'reverse' : 'normal', numericValue: nums[0], trump: suit };
+  }
+  if (suit && t.includes('+')) {
+    return { type: 'suit_plus', numericValue: currentHighest + (nums[0] || 1), trump: suit };
+  }
+  if (nums.length > 0) return { type: 'nt', numericValue: nums[0], trump: null };
+  return null;
+}
+
+// ─── Game Flow ───────────────────────────────────────────────────────────────
 
 function startBidding(room) {
   room.state = 'bidding';
   room.bids = [];
-  room.currentBid = { amount: 0, player: null };
+  room.currentBid = { amount: 0, playerId: null, trump: null };
+  room.doubleState = 0;
+  room.doubledBy = null;
   room.trump = null;
-  room.scores = { A: 0, B: 0 };
-  room.tricksWon = { A: 0, B: 0 };
+  room.roundPoints = { A: 0, B: 0 };
   room.currentTrick = [];
-  // Bidding starts from player index 0
-  room.currentPlayer = room.players[0].id;
+  room.passCount = 0;
   dealCards(room);
+  room.currentBidderIdx = ccwNext(room, room.dealerIdx);
+  broadcast(room, { type: 'log', msg: `🃏 Cards dealt! ${room.players[room.currentBidderIdx].name} bids first.` });
   sendState(room);
-  broadcastAll(room, { type: 'log', msg: `🃏 Cards dealt! Bidding starts. Minimum bid: 28. Player ${room.players[0].name} bids first.` });
 }
 
-function nextBidder(room) {
-  const idx = room.players.findIndex(p => p.id === room.currentPlayer);
-  const nextIdx = (idx + 1) % room.players.length;
-  // Check if we've gone around and all passed except highest bidder
-  return room.players[nextIdx].id;
-}
-
-function handleBid(room, playerId, amount) {
+function handleBid(room, playerId, bidText) {
   if (room.state !== 'bidding') return;
-  if (room.currentPlayer !== playerId) return;
-
-  const player = room.players.find(p => p.id === playerId);
-  const minBid = Math.max(28, room.currentBid.amount + 1);
-
-  if (amount === 0) {
-    // Pass
-    room.bids.push({ player: playerId, name: player.name, amount: 0 });
-    broadcastAll(room, { type: 'log', msg: `${player.name} passed.` });
-  } else if (amount >= minBid && amount <= 56) {
-    room.bids.push({ player: playerId, name: player.name, amount });
-    room.currentBid = { amount, player: playerId };
-    broadcastAll(room, { type: 'log', msg: `${player.name} bid ${amount}!` });
-  } else {
-    sendTo(player.ws, { type: 'error', msg: `Invalid bid. Min: ${minBid}` });
+  const bidderIdx = room.players.findIndex(p => p.id === playerId);
+  if (bidderIdx !== room.currentBidderIdx) {
+    sendTo(room.players[bidderIdx]?.ws, { type: 'error', msg: "Not your turn to bid." });
+    return;
+  }
+  const player = room.players[bidderIdx];
+  const parsed = parseBid(bidText, room.currentBid.amount);
+  if (!parsed) {
+    sendTo(player.ws, { type: 'error', msg: "Invalid bid. Try: 28♥  ♥28  +2♥  32NT  33NS  Pass  Double" });
     return;
   }
 
-  // Check if bidding is over: all others passed
-  const activePlayers = room.players.map(p => p.id);
-  const lastRound = room.bids.slice(-room.players.length);
-  const allPassed = lastRound.filter(b => b.amount === 0).length >= room.players.length - 1 && room.currentBid.amount > 0;
+  const bidTeam = player.team;
 
-  if (allPassed || room.currentBid.amount === 56) {
-    // Bidding done
-    const winner = room.players.find(p => p.id === room.currentBid.player);
-    broadcastAll(room, { type: 'log', msg: `🏆 ${winner.name} won the bid with ${room.currentBid.amount}! Choose trump suit.` });
-    room.state = 'trump';
-    room.currentPlayer = room.currentBid.player;
-    sendState(room);
-  } else {
-    room.currentPlayer = nextBidder(room);
-    sendState(room);
+  if (parsed.type === 'double') {
+    if (room.doubleState !== 0) { sendTo(player.ws, { type: 'error', msg: "Already doubled." }); return; }
+    if (!room.currentBid.playerId) { sendTo(player.ws, { type: 'error', msg: "Nothing to double." }); return; }
+    if (getTeam(room, room.currentBid.playerId) === bidTeam) { sendTo(player.ws, { type: 'error', msg: "Can't double your own team." }); return; }
+    room.doubleState = 1; room.doubledBy = playerId;
+    room.bids.push({ playerId, name: player.name, text: 'DOUBLE', type: 'double', numericValue: room.currentBid.amount, trump: room.currentBid.trump });
+    broadcast(room, { type: 'log', msg: `⚡ ${player.name} DOUBLED!` });
+    room.passCount = 0;
+    room.currentBidderIdx = ccwNext(room, bidderIdx);
+    sendState(room); return;
   }
+
+  if (parsed.type === 'redouble') {
+    if (room.doubleState !== 1) { sendTo(player.ws, { type: 'error', msg: "No double to redouble." }); return; }
+    if (getTeam(room, room.doubledBy) === bidTeam) { sendTo(player.ws, { type: 'error', msg: "Can't redouble your own team's double." }); return; }
+    room.doubleState = 2;
+    room.bids.push({ playerId, name: player.name, text: 'REDOUBLE', type: 'redouble', numericValue: room.currentBid.amount, trump: room.currentBid.trump });
+    broadcast(room, { type: 'log', msg: `💥 ${player.name} REDOUBLED! Bidding ends.` });
+    startPlay(room); return;
+  }
+
+  if (parsed.type === 'pass') {
+    room.bids.push({ playerId, name: player.name, text: 'Pass', type: 'pass', numericValue: room.currentBid.amount, trump: room.currentBid.trump });
+    broadcast(room, { type: 'log', msg: `${player.name} passed.` });
+    room.passCount++;
+    const needed = room.currentBid.playerId ? room.players.length - 1 : room.players.length;
+    if (room.passCount >= needed) {
+      if (!room.currentBid.playerId) {
+        const firstBidder = room.players[ccwNext(room, room.dealerIdx)];
+        room.currentBid = { amount: 28, playerId: firstBidder.id, trump: null };
+        broadcast(room, { type: 'log', msg: `All passed. No-Trump game, scored as bid 28 by opponents.` });
+      }
+      startPlay(room);
+    } else {
+      room.currentBidderIdx = ccwNext(room, bidderIdx);
+      sendState(room);
+    }
+    return;
+  }
+
+  // Real bid
+  const val = parsed.numericValue;
+  if (!val || val < 28 || val > 56) { sendTo(player.ws, { type: 'error', msg: "Bid must be 28–56." }); return; }
+  if (val <= room.currentBid.amount) { sendTo(player.ws, { type: 'error', msg: `Must beat current bid of ${room.currentBid.amount}.` }); return; }
+
+  room.currentBid = { amount: val, playerId, trump: parsed.trump };
+  room.doubleState = 0; room.doubledBy = null; room.passCount = 0;
+
+  const typeHint = {
+    normal: '— has J + cards in suit',
+    reverse: '— suit strength, no J',
+    plus_suit: '— singleton/extra in suit',
+    suit_plus: '— partial suit strength',
+    nt: '— no trump / general',
+    plus_nt: '— no trump extra',
+    ns: '— no cards in last bid suit',
+    pass_bid: '— obligatory/no info',
+  }[parsed.type] || '';
+
+  const trumpLabel = parsed.trump || 'NT';
+  room.bids.push({ playerId, name: player.name, text: bidText, type: parsed.type, numericValue: val, trump: parsed.trump });
+  broadcast(room, { type: 'log', msg: `📢 ${player.name}: ${val}${trumpLabel} ${typeHint}` });
+
+  if (val === 56) { broadcast(room, { type: 'log', msg: `Max bid of 56! Bidding ends.` }); startPlay(room); return; }
+  room.currentBidderIdx = ccwNext(room, bidderIdx);
+  sendState(room);
 }
 
-function handleTrump(room, playerId, suit) {
-  if (room.state !== 'trump') return;
-  if (room.currentPlayer !== playerId) return;
-  if (!SUITS.includes(suit)) return;
-
-  room.trump = suit;
-  const player = room.players.find(p => p.id === playerId);
-  broadcastAll(room, { type: 'log', msg: `${player.name} chose ${suit} as trump! Game begins.` });
-
+function startPlay(room) {
   room.state = 'playing';
-  room.trickLeader = playerId;
-  room.currentPlayer = playerId;
+  room.trump = room.currentBid.trump;
+  room.currentTrick = [];
+  const leaderIdx = ccwNext(room, room.dealerIdx);
+  room.trickLeader = room.players[leaderIdx].id;
+  room.currentPlayer = room.trickLeader;
+  const bidder = room.players.find(p => p.id === room.currentBid.playerId);
+  broadcast(room, { type: 'log', msg: `🎮 Play! Bid: ${room.currentBid.amount} by ${bidder?.name}. ${room.trump ? 'Trump: ' + room.trump : 'No Trump'}. ${room.players[leaderIdx].name} leads.` });
   sendState(room);
 }
 
 function handlePlayCard(room, playerId, cardId) {
   if (room.state !== 'playing') return;
-  if (room.currentPlayer !== playerId) return;
-
-  const player = room.players.find(p => p.id === playerId);
-  const cardIdx = player.hand.findIndex(c => c.id === cardId);
-  if (cardIdx === -1) {
-    sendTo(player.ws, { type: 'error', msg: 'Card not in hand!' });
+  if (room.currentPlayer !== playerId) {
+    sendTo(room.players.find(p => p.id === playerId)?.ws, { type: 'error', msg: "Not your turn." });
     return;
   }
+  const player = room.players.find(p => p.id === playerId);
+  const idx = player.hand.findIndex(c => c.id === cardId);
+  if (idx === -1) { sendTo(player.ws, { type: 'error', msg: "Card not in hand." }); return; }
 
-  // Follow suit validation
   if (room.currentTrick.length > 0) {
     const leadSuit = room.currentTrick[0].card.suit;
-    const card = player.hand[cardIdx];
-    const hasSuit = player.hand.some(c => c.suit === leadSuit);
-    if (hasSuit && card.suit !== leadSuit) {
-      sendTo(player.ws, { type: 'error', msg: `Must follow suit: ${leadSuit}` });
-      return;
+    const card = player.hand[idx];
+    if (card.suit !== leadSuit && player.hand.some(c => c.suit === leadSuit)) {
+      sendTo(player.ws, { type: 'error', msg: `Must follow suit: ${leadSuit}` }); return;
     }
   }
 
-  const [card] = player.hand.splice(cardIdx, 1);
+  const [card] = player.hand.splice(idx, 1);
   room.currentTrick.push({ playerId, name: player.name, card });
-
-  broadcastAll(room, { type: 'log', msg: `${player.name} played ${card.rank}${card.suit}` });
+  broadcast(room, { type: 'log', msg: `${player.name} ▶ ${card.rank}${card.suit}` });
 
   if (room.currentTrick.length === room.players.length) {
-    // Evaluate trick
-    setTimeout(() => resolveTrick(room), 1200);
+    setTimeout(() => resolveTrick(room), 1400);
   } else {
-    // Next player
-    const idx = room.players.findIndex(p => p.id === playerId);
-    room.currentPlayer = room.players[(idx + 1) % room.players.length].id;
+    const pi = room.players.findIndex(p => p.id === playerId);
+    room.currentPlayer = room.players[ccwNext(room, pi)].id;
     sendState(room);
   }
 }
@@ -290,22 +372,21 @@ function handlePlayCard(room, playerId, cardId) {
 function resolveTrick(room) {
   const winnerId = trickWinner(room.currentTrick, room.trump);
   const winner = room.players.find(p => p.id === winnerId);
-  const trickPoints = room.currentTrick.reduce((sum, t) => sum + cardPoints(t.card), 0);
-
-  const team = winner.team;
-  room.scores[team] += trickPoints;
-  room.tricksWon[team]++;
-
-  broadcastAll(room, { type: 'log', msg: `✅ ${winner.name} wins the trick! (+${trickPoints} pts for Team ${team})` });
+  const pts = room.currentTrick.reduce((s, t) => s + (CARD_POINTS[t.card.rank] || 0), 0);
+  room.roundPoints[winner.team] += pts;
+  broadcast(room, { type: 'log', msg: `✅ ${winner.name} wins trick! +${pts}pts → Team ${winner.team} has ${room.roundPoints[winner.team]}pts` });
 
   room.currentTrick = [];
   room.trickLeader = winnerId;
   room.currentPlayer = winnerId;
 
-  // Check if round over
-  const totalCards = room.players.reduce((s, p) => s + p.hand.length, 0);
-  if (totalCards === 0) {
-    setTimeout(() => endRound(room), 800);
+  const totalLeft = room.players.reduce((s, p) => s + p.hand.length, 0);
+  const bidTeam = getTeam(room, room.currentBid.playerId);
+  const remaining = 56 - room.roundPoints.A - room.roundPoints.B;
+  const stillNeeded = room.currentBid.amount - room.roundPoints[bidTeam];
+
+  if (totalLeft === 0 || stillNeeded > remaining) {
+    setTimeout(() => endRound(room), 700);
   } else {
     sendState(room);
   }
@@ -313,165 +394,108 @@ function resolveTrick(room) {
 
 function endRound(room) {
   room.state = 'roundEnd';
-  const bidTeam = room.players.find(p => p.id === room.currentBid.player)?.team;
-  const bidAmount = room.currentBid.amount;
-  const bidTeamScore = room.scores[bidTeam];
-  const otherTeam = bidTeam === 'A' ? 'B' : 'A';
+  const bidTeam = getTeam(room, room.currentBid.playerId);
+  const oppTeam = bidTeam === 'A' ? 'B' : 'A';
+  const bidAmt = room.currentBid.amount;
+  const bidPts = room.roundPoints[bidTeam];
+  const made = bidPts >= bidAmt;
 
-  let msg = '';
-  if (bidTeamScore >= bidAmount) {
-    room.totalScores[bidTeam] += bidTeamScore;
-    room.totalScores[otherTeam] += room.scores[otherTeam];
-    msg = `🎉 Team ${bidTeam} made their bid of ${bidAmount}! (scored ${bidTeamScore}). Team ${otherTeam} scored ${room.scores[otherTeam]}.`;
+  if (made) {
+    const win = applyMultiplier(tablesWin(bidAmt), room.doubleState);
+    room.tables[bidTeam] = Math.min(24, room.tables[bidTeam] + win);
+    broadcast(room, { type: 'log', msg: `🏆 Team ${bidTeam} MADE ${bidAmt} (scored ${bidPts})! +${win} tables → A:${room.tables.A} B:${room.tables.B}` });
   } else {
-    // Bid team set — they lose bid amount, other team gets their points
-    room.totalScores[bidTeam] -= bidAmount;
-    room.totalScores[otherTeam] += room.scores[otherTeam];
-    msg = `💀 Team ${bidTeam} was SET! Bid ${bidAmount}, only scored ${bidTeamScore}. -${bidAmount} pts!`;
+    const lose = applyMultiplier(tablesLose(bidAmt), room.doubleState);
+    const actual = Math.min(room.tables[bidTeam], lose);
+    room.tables[bidTeam] -= actual;
+    room.tables[oppTeam] = Math.min(24, room.tables[oppTeam] + actual);
+    broadcast(room, { type: 'log', msg: `💀 Team ${bidTeam} FAILED ${bidAmt} (only ${bidPts})! -${actual} tables → A:${room.tables.A} B:${room.tables.B}` });
   }
 
-  room.roundHistory.push({
-    bid: bidAmount,
-    bidTeam,
-    scores: { ...room.scores },
-    totals: { ...room.totalScores },
-  });
+  room.roundHistory.push({ bidAmt, bidTeam, made, scores: { ...room.roundPoints }, tables: { ...room.tables }, double: room.doubleState });
 
-  broadcastAll(room, { type: 'log', msg });
-
-  // Check game win (first to 56 total, or other conditions)
-  const winner = Object.entries(room.totalScores).find(([t, s]) => s >= room.targetScore);
-  if (winner) {
-    room.state = 'gameEnd';
-    broadcastAll(room, { type: 'log', msg: `🏆🏆 TEAM ${winner[0]} WINS THE GAME with ${winner[1]} points! 🏆🏆` });
-    sendState(room);
-  } else {
-    sendState(room);
-    broadcastAll(room, { type: 'log', msg: `Round over. Totals → Team A: ${room.totalScores.A} | Team B: ${room.totalScores.B}. Host can start next round.` });
+  if (room.tables.A <= 0 || room.tables.B <= 0) {
+    const winner = room.tables.A > room.tables.B ? 'A' : 'B';
+    room.state = 'matchEnd';
+    broadcast(room, { type: 'log', msg: `🏆🏆 MATCH OVER! TEAM ${winner} WINS!` });
+    sendState(room); return;
   }
+
+  room.dealerIdx = ccwNext(room, room.dealerIdx);
+  broadcast(room, { type: 'log', msg: `Host can start next round.` });
+  sendState(room);
 }
 
-// ─── WebSocket Handler ────────────────────────────────────────────────────────
+// ─── WebSocket ───────────────────────────────────────────────────────────────
 
 wss.on('connection', (ws) => {
   const playerId = uuidv4();
-  clients[ws] = { playerId, roomId: null, name: null };
-
+  clients[ws] = { playerId };
   sendTo(ws, { type: 'connected', playerId });
 
   ws.on('message', (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
+    let msg; try { msg = JSON.parse(raw); } catch { return; }
+    const { roomId } = clients[ws];
+    const room = roomId ? rooms[roomId] : null;
 
-    const client = clients[ws];
+    if (msg.type === 'join_room') {
+      const { roomId: rid, name } = msg;
+      if (!rid || !name) return;
+      let r = rooms[rid];
+      if (!r) { r = createRoom(rid); rooms[rid] = r; }
+      if (r.players.length >= 8) { sendTo(ws, { type: 'error', msg: 'Room full.' }); return; }
+      if (r.state !== 'lobby') { sendTo(ws, { type: 'error', msg: 'Game in progress.' }); return; }
+      clients[ws].roomId = rid;
+      r.players.push({ id: playerId, name, ws, team: null, hand: [] });
+      broadcast(r, { type: 'log', msg: `${name} joined! (${r.players.length} players)` });
+      sendTo(ws, { type: 'joined', playerId, roomId: rid });
+      sendState(r);
+      return;
+    }
+
+    if (!room) return;
 
     switch (msg.type) {
-      case 'join_room': {
-        const { roomId, name } = msg;
-        if (!roomId || !name) return;
-
-        let room = rooms[roomId];
-        if (!room) {
-          room = createRoom(roomId);
-          rooms[roomId] = room;
-        }
-
-        if (room.players.length >= room.maxPlayers) {
-          sendTo(ws, { type: 'error', msg: 'Room is full (max 6 players).' });
-          return;
-        }
-
-        if (room.state !== 'lobby') {
-          sendTo(ws, { type: 'error', msg: 'Game already in progress.' });
-          return;
-        }
-
-        client.roomId = roomId;
-        client.name = name;
-        client.playerId = playerId;
-
-        room.players.push({ id: playerId, name, ws, team: null, hand: [], ready: false });
-
-        broadcast(room, { type: 'log', msg: `${name} joined the room! (${room.players.length}/${room.maxPlayers})` }, playerId);
-        sendTo(ws, { type: 'joined', playerId, roomId });
-        sendState(room);
-        break;
-      }
-
       case 'start_game': {
-        const room = rooms[client.roomId];
-        if (!room) return;
-        if (room.players[0].id !== playerId) {
-          sendTo(ws, { type: 'error', msg: 'Only the host can start the game.' });
-          return;
-        }
-        if (room.players.length < 2) {
-          sendTo(ws, { type: 'error', msg: 'Need at least 2 players.' });
-          return;
-        }
+        if (room.players[0]?.id !== playerId) { sendTo(ws, { type: 'error', msg: 'Only host can start.' }); return; }
+        const n = room.players.length;
+        if (![4, 6, 8].includes(n)) { sendTo(ws, { type: 'error', msg: `Need 4, 6, or 8 players. You have ${n}.` }); return; }
         assignTeams(room);
+        room.tables = { A: 12, B: 12 };
+        broadcast(room, { type: 'log', msg: `🎮 Match begins! Team A: ${room.players.filter(p=>p.team==='A').map(p=>p.name).join(', ')} | Team B: ${room.players.filter(p=>p.team==='B').map(p=>p.name).join(', ')}` });
         startBidding(room);
-        broadcastAll(room, { type: 'log', msg: `🎮 Game started! Teams assigned. Team A: ${room.players.filter(p=>p.team==='A').map(p=>p.name).join(', ')} | Team B: ${room.players.filter(p=>p.team==='B').map(p=>p.name).join(', ')}` });
         break;
       }
-
-      case 'next_round': {
-        const room = rooms[client.roomId];
-        if (!room) return;
-        if (room.players[0].id !== playerId) return;
-        if (room.state !== 'roundEnd') return;
+      case 'next_round':
+        if (room.players[0]?.id !== playerId || room.state !== 'roundEnd') return;
         startBidding(room);
-        broadcastAll(room, { type: 'log', msg: `🔄 New round started!` });
+        broadcast(room, { type: 'log', msg: '🔄 New round!' });
         break;
-      }
-
-      case 'bid': {
-        const room = rooms[client.roomId];
-        if (!room) return;
-        handleBid(room, playerId, msg.amount);
+      case 'bid':
+        handleBid(room, playerId, msg.text || '');
         break;
-      }
-
-      case 'choose_trump': {
-        const room = rooms[client.roomId];
-        if (!room) return;
-        handleTrump(room, playerId, msg.suit);
-        break;
-      }
-
-      case 'play_card': {
-        const room = rooms[client.roomId];
-        if (!room) return;
+      case 'play_card':
         handlePlayCard(room, playerId, msg.cardId);
         break;
-      }
-
       case 'chat': {
-        const room = rooms[client.roomId];
-        if (!room) return;
         const player = room.players.find(p => p.id === playerId);
-        broadcastAll(room, { type: 'chat', name: player?.name || 'Unknown', msg: msg.text });
+        broadcast(room, { type: 'chat', name: player?.name || '?', msg: msg.text });
         break;
       }
     }
   });
 
   ws.on('close', () => {
-    const client = clients[ws];
-    if (client?.roomId) {
-      const room = rooms[client.roomId];
-      if (room) {
-        const idx = room.players.findIndex(p => p.id === client.playerId);
-        if (idx !== -1) {
-          const name = room.players[idx].name;
-          room.players.splice(idx, 1);
-          broadcastAll(room, { type: 'log', msg: `${name} left the room.` });
-          if (room.players.length === 0) {
-            delete rooms[client.roomId];
-          } else {
-            sendState(room);
-          }
-        }
+    const { roomId } = clients[ws] || {};
+    if (roomId && rooms[roomId]) {
+      const room = rooms[roomId];
+      const i = room.players.findIndex(p => p.id === playerId);
+      if (i !== -1) {
+        const name = room.players[i].name;
+        room.players.splice(i, 1);
+        broadcast(room, { type: 'log', msg: `${name} disconnected.` });
+        if (room.players.length === 0) delete rooms[roomId];
+        else sendState(room);
       }
     }
     delete clients[ws];
@@ -479,6 +503,4 @@ wss.on('connection', (ws) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`56 Game server running on http://localhost:${PORT}`);
-});
+server.listen(PORT, () => console.log(`56 Game server → http://localhost:${PORT}`));
